@@ -12,28 +12,21 @@ const Notification = require('./models/Notification');
 const app = express();
 
 // --- MIDDLEWARES ---
-// CORRECTION : Configuration CORS plus robuste pour le déploiement
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173", // Ajout du port par défaut de Vite
-  process.env.FRONTEND_URL // Ton futur lien Vercel/Netlify
-];
-
+// Simplification du CORS pour être sûr que Vercel ne soit jamais bloqué
 app.use(cors({
-  origin: function (origin, callback) {
-    // Permet les requêtes sans origine (comme Postman ou les outils mobiles)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('CORS non autorisé pour cette origine'), false);
-    }
-    return callback(null, true);
-  },
+  origin: true, // Autorise toutes les origines en développement/prod pour débloquer
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"], // CRUCIAL pour le passage du Token Admin
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
 
 app.use(express.json());
+
+// --- ROUTE DE TEST (Health Check) ---
+// Tape https://emile-auto-backend.onrender.com/ dans ton navigateur pour voir si ça marche
+app.get('/', (req, res) => {
+  res.send("🚀 Serveur Emile Auto opérationnel !");
+});
 
 // --- BRANCHEMENT DES ROUTES ---
 app.use('/api/notifications', notificationRoutes);
@@ -42,21 +35,14 @@ app.use('/api/notifications', notificationRoutes);
 app.delete('/api/notifications/clear-all', async (req, res) => {
   try {
     await Notification.deleteMany({});
-    console.log("🗑️ Historique des notifications vidé");
     res.status(200).json({ message: "Historique vidé avec succès" });
   } catch (err) {
-    console.error("❌ Erreur suppression notifications:", err);
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
 
 // --- CONNEXION MONGODB ---
 const mongoURI = process.env.MONGODB_URI;
-
-if (!mongoURI) {
-  console.error("❌ ERREUR : La variable MONGODB_URI n'est pas définie");
-  process.exit(1);
-}
 
 mongoose.set('strictQuery', false);
 mongoose.connect(mongoURI)
@@ -66,7 +52,6 @@ mongoose.connect(mongoURI)
 // --- ROUTES AUTHENTIFICATION ---
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
-  // Vérification stricte via le .env
   if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
     const token = jwt.sign(
       { userId: 'admin_emile_auto' },
@@ -79,6 +64,7 @@ app.post('/api/login', (req, res) => {
 });
 
 // --- ROUTES API CARS ---
+// Assure-toi que ces routes ne sont pas REDÉFINIES dans un autre fichier de route
 app.get('/api/cars', async (req, res) => {
   try {
     const cars = await Car.find().sort({ createdAt: -1 });
@@ -123,15 +109,6 @@ app.delete('/api/cars/:id', async (req, res) => {
     res.json({ message: "Retiré" });
   } catch (err) {
     res.status(500).json({ message: err.message });
-  }
-});
-
-app.put('/api/cars/view/:id', async (req, res) => {
-  try {
-    const updatedCar = await Car.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } }, { new: true });
-    res.json({ views: updatedCar.views });
-  } catch (err) {
-    res.status(500).json({ message: "Erreur vues" });
   }
 });
 
